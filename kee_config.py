@@ -42,6 +42,7 @@ def cli(keepass_file, password, key_file):
                 ),
                 mode=int(config["mode"], 8)
             )
+            # TODO create parents
             with open(target_descriptor, mode="wb") as target_file:
                 target_file.write(attachment.binary)
 
