@@ -13,6 +13,11 @@ click = "^8.1.8"
 loguru = "^0.7.3"
 
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+pytest-cov = "^6.1.1"
+ruff = "^0.11.10"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
