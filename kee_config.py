@@ -4,6 +4,7 @@ import tomllib
 from os.path import expanduser, expandvars
 from pathlib import Path
 import os
+import subprocess
 
 import click
 
@@ -92,7 +93,9 @@ class KeeConfig:
 
             if export_flag:
                 logger.debug(os.environ["HOME"])
-                self.process_section(entry, init_config, "files", self.export_attachment)
+                self.process_section(
+                    entry, init_config, "files", self.export_attachment
+                )
 
             if connections_flag:
                 self.process_section(
@@ -140,22 +143,20 @@ class KeeConfig:
         with open(target_descriptor, mode="wb") as target_file:
             target_file.write(kee_attachment.binary)
 
-    def export_connection(
-        self,
-        entry,
-        **config
-    ):
+    def export_connection(self, entry, **config):
         """Write a network manager connection from the keepass file to the network manager system-connections in filesystem."""
-        # nmcli --offline connection add type ethernet con-name Example-Connection ipv4.addresses 192.0.2.1/24 ipv4.dns 192.0.2.200 ipv4.method manual > /etc/NetworkManager/system-connections/example.nmconnection
-        # chown root:root
-        # chmod 600
-        # nmcli connection reload
+        logger.debug(f"export_connection: {entry.title}")
+        connection_type = None
         if not config:
-            connection_types = set(entry.tags).intersection(["ethernet", "wifi", "vpn", "wireguard"])
+            connection_types = set(entry.tags).intersection(
+                ["ethernet", "wifi", "vpn", "wireguard"]
+            )
             if len(connection_types) != 1:
                 logger.error(f"Cannot identify connection type from tags: {entry.tags}")
                 return
-            connection_type = connection_types.first
+            connection_type = next(iter(connection_types))
+        connection_type = config.get("type", connection_type)
+        connection_name = config.get("con-name", entry.title)
         if connection_type == "ethernet":
             # not yet implemented
             # command_args = [
@@ -166,18 +167,20 @@ class KeeConfig:
             #     "ipv4.method",
             #     "manual",
             # ]
-            pass
+            command_args = []
         elif connection_type == "wifi":
-            connection_name = config["con-name"] or entry.title
             command_args = [
                 "ssid",
-                config["ssid"] or entry.username,
+                config.get("ssid", entry.username),
                 "wifi-sec.key-mgmt",
-                config["wifi-sec"]["key-mgmt"] or "wpa-psk",
+                config.get("wifi-sec", {}).get("key-mgmt", "wpa-psk"),
                 "wifi-sec.psk",
-                config["wifi-sec"]["psk"] or entry.password,
+                config.get("wifi-sec", {}).get("psk", entry.password),
             ]
             logger.debug(f"connection_name: {connection_name}")
+        else:
+            logger.error(f"Unsupported type {connection_type}")
+            return
         command = [
             "nmcli",
             "--offline",
@@ -187,18 +190,20 @@ class KeeConfig:
             connection_type,
             "con-name",
             connection_name,
-            *command_args
+            *command_args,
         ]
         complete = subprocess.run(command, capture_output=True)
         if complete.returncode == 0:
             # Write {complete.stdout} to a file
             logger.debug(command)
             logger.debug(complete.stdout)
+            # chown root:root
+            # chmod 600
+            # nmcli connection reload
         else:
             logger.error(
                 f"Standard output: {complete.stdout}, Error output: {complete.stderr}",
             )
-        pass
 
     def import_connections(self):
         """Get the connections (mostly wifi) from the system to store them in the keepass file."""
