@@ -81,8 +81,10 @@ class KeeConfig:
             # TODO, make sure it was not deleted or is in the trash
             logger.info(f"Processing init entry: {entry.title}")
             init_config_string = entry.get_custom_property("init")
-            init_config = tomllib.loads(init_config_string)
-            logger.debug(f"Init config: {init_config}")
+            init_config = None
+            if init_config_string:
+                init_config = tomllib.loads(init_config_string)
+                logger.debug(f"Init config: {init_config}")
 
             if env_flag:
                 logger.debug("hi")
@@ -90,28 +92,34 @@ class KeeConfig:
 
             if export_flag:
                 logger.debug(os.environ["HOME"])
-                self.process_section(entry, init_config, "files", self.write_attachment)
+                self.process_section(entry, init_config, "files", self.export_attachment)
 
             if connections_flag:
                 self.process_section(
-                    entry, init_config, "connections", self.write_connection
+                    entry, init_config, "connections", self.export_connection
                 )
 
     def process_section(self, entry, init_config, section, method):
         """From an entry process the subsections of a specified toml section with the given method."""
-        if section in init_config:
+        if init_config and section in init_config:
             for config_section, config in init_config[section].items():
                 logger.info(f"Processing {section} init block: {config_section}")
                 method(entry, **config)
+        else:
+            method(entry)
 
     def kee_env(self, entry, **env):
         """Get variables from the keepass file and write them to stdout to be evaluated.
         E.g. with `> eval $(kee-config --env)`"""
+        if not env and "env" in entry.tags:
+            print(f'export {entry.username}="{entry.password}"')
         for key, value in env.items():
             print(f'export {key}="{value}"')
 
-    def write_attachment(self, entry, attachment, target, mode):
+    def export_attachment(self, entry, attachment=None, target=None, mode=None):
         """Write an attachment from the keepass file to the filesystem."""
+        if not attachment:
+            return
         # Alternatively get it from entry.attachments
         kee_attachment = self.kp.find_attachments(
             element=entry, filename=attachment, first=True, recursive=False
@@ -135,12 +143,61 @@ class KeeConfig:
     def export_connection(
         self,
         entry,
+        **config
     ):
         """Write a network manager connection from the keepass file to the network manager system-connections in filesystem."""
         # nmcli --offline connection add type ethernet con-name Example-Connection ipv4.addresses 192.0.2.1/24 ipv4.dns 192.0.2.200 ipv4.method manual > /etc/NetworkManager/system-connections/example.nmconnection
         # chown root:root
         # chmod 600
         # nmcli connection reload
+        if not config:
+            connection_types = set(entry.tags).intersection(["ethernet", "wifi", "vpn", "wireguard"])
+            if len(connection_types) != 1:
+                logger.error(f"Cannot identify connection type from tags: {entry.tags}")
+                return
+            connection_type = connection_types.first
+        if connection_type == "ethernet":
+            # not yet implemented
+            # command_args = [
+            #     "ipv4.addresses",
+            #     "192.0.2.1/24",
+            #     "ipv4.dns",
+            #     "192.0.2.200",
+            #     "ipv4.method",
+            #     "manual",
+            # ]
+            pass
+        elif connection_type == "wifi":
+            connection_name = config["con-name"] or entry.title
+            command_args = [
+                "ssid",
+                config["ssid"] or entry.username,
+                "wifi-sec.key-mgmt",
+                config["wifi-sec"]["key-mgmt"] or "wpa-psk",
+                "wifi-sec.psk",
+                config["wifi-sec"]["psk"] or entry.password,
+            ]
+            logger.debug(f"connection_name: {connection_name}")
+        command = [
+            "nmcli",
+            "--offline",
+            "connection",
+            "add",
+            "type",
+            connection_type,
+            "con-name",
+            connection_name,
+            *command_args
+        ]
+        complete = subprocess.run(command, capture_output=True)
+        if complete.returncode == 0:
+            # Write {complete.stdout} to a file
+            logger.debug(command)
+            logger.debug(complete.stdout)
+        else:
+            logger.error(
+                f"Standard output: {complete.stdout}, Error output: {complete.stderr}",
+            )
         pass
 
     def import_connections(self):
