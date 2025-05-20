@@ -205,12 +205,9 @@ class KeeConfig:
         ]
         complete = subprocess.run(command, capture_output=True)
         if complete.returncode == 0:
-            # Write {complete.stdout} to a file
             write_file_with_permissions(
                 system_connection_file, complete.stdout, permissions="600", chown=(0, 0)
             )
-            logger.debug(command)
-            print(complete.stdout.decode("utf-8"))
             # nmcli connection reload
         else:
             logger.error(
