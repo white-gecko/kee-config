@@ -62,16 +62,30 @@ def cli(
     system_connections,
 ):
     """Read config from a keepass file."""
-    kc = KeeConfig(keepass_file, password=password, keyfile=key_file)
-    kc.load(env_flag, export_flag, connections_flag, system_connections)
+    if system_connections:
+        system_connections = Path(system_connections)
+    kc = KeeConfig(
+        keepass_file,
+        password=password,
+        keyfile=key_file,
+        system_connections=system_connections,
+    )
+    kc.load(env_flag, export_flag, connections_flag)
 
 
 class KeeConfig:
-    def __init__(self, keepass_file, password, keyfile=None):
+    def __init__(
+        self,
+        keepass_file,
+        password,
+        keyfile=None,
+        system_connections: Path = Path("/etc/NetworkManager/system-connections"),
+    ):
         # load database
         self.kp = PyKeePass(keepass_file, password=password, keyfile=keyfile)
+        self.system_connections = system_connections
 
-    def load(self, env_flag, export_flag, connections_flag, system_connections):
+    def load(self, env_flag, export_flag, connections_flag):
         # find any entry by its title
         tags = ["init"]
         if env_flag:
@@ -119,7 +133,9 @@ class KeeConfig:
         for key, value in env.items():
             print(f'export {key}="{value}"')
 
-    def export_attachment(self, entry, attachment=None, target=None, mode=None):
+    def export_attachment(
+        self, entry, attachment: str = None, target: str = None, mode: str = None
+    ):
         """Write an attachment from the keepass file to the filesystem."""
         if not attachment:
             return
@@ -131,17 +147,9 @@ class KeeConfig:
             logger.error(f"attachment {attachment} could not be found.")
             return
         target_path = Path(expanduser(expandvars(target)))
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_descriptor = os.open(
-            path=target_path,
-            flags=(
-                os.O_WRONLY  # access mode: write only
-                | os.O_CREAT  # create if not exists
-            ),
-            mode=int(mode, 8),
+        write_file_with_permissions(
+            target_path, kee_attachment.binary, permissions=mode
         )
-        with open(target_descriptor, mode="wb") as target_file:
-            target_file.write(kee_attachment.binary)
 
     def export_connection(self, entry, **config):
         """Write a network manager connection from the keepass file to the network manager system-connections in filesystem."""
@@ -157,6 +165,9 @@ class KeeConfig:
             connection_type = next(iter(connection_types))
         connection_type = config.get("type", connection_type)
         connection_name = config.get("con-name", entry.title)
+        system_connection_file = (
+            self.system_connections / f"{connection_name}.nmconnection"
+        )
         if connection_type == "ethernet":
             # not yet implemented
             # command_args = [
@@ -195,10 +206,11 @@ class KeeConfig:
         complete = subprocess.run(command, capture_output=True)
         if complete.returncode == 0:
             # Write {complete.stdout} to a file
+            write_file_with_permissions(
+                system_connection_file, complete.stdout, permissions="600", chown=(0, 0)
+            )
             logger.debug(command)
-            logger.debug(complete.stdout)
-            # chown root:root
-            # chmod 600
+            print(complete.stdout.decode("utf-8"))
             # nmcli connection reload
         else:
             logger.error(
@@ -212,6 +224,35 @@ class KeeConfig:
         "This is just a stub, first we need to be able to write them"
 
         pass
+
+
+def write_file_with_permissions(
+    path: Path,
+    data: str | bytes,
+    permissions: str | None = None,
+    chown: tuple[int, int] | None = None,
+    mode: str | None = "wb",
+):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    """Create a target descriptor with:
+    the path, the flags O_WRONLY: "access mode: write only" and O_CREAT: "create if not exists", and
+    the file mode/file permissions wich are read from an ocatal (base 8) number.
+    """
+    if permissions:
+        descriptor = os.open(
+            path=path,
+            flags=(os.O_WRONLY | os.O_CREAT),
+            mode=int(permissions, 8),
+        )
+    else:
+        descriptor = path
+    with open(descriptor, mode="wb") as file:
+        file.write(data)
+    if chown:
+        try:
+            os.chown(path, chown[0], chown[1])
+        except PermissionError as e:
+            logger.error(f"Can't set the file permissions to {chown} for {path}: {e}")
 
 
 if __name__ == "__main__":
