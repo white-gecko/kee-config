@@ -221,9 +221,7 @@ class KeeConfig:
         """Get the connections (mostly wifi) from the system to store them in the keepass file."""
         # nmcli connection show
         # List system_connections
-        "This is just a stub, first we need to be able to write them"
-
-        pass
+        logger.info("This method is not yet implemented")
 
 
 def write_file_with_permissions(
