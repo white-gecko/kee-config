@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from kee_config import cli
 import os
+import json
 
 TEST_FILE = "TestPasswords.kdbx"
 TEST_FILE_PWD = "start123"
@@ -11,8 +12,24 @@ def test_cli_env():
     result = runner.invoke(
         cli, ["--keepass-file", TEST_FILE, "--password", TEST_FILE_PWD, "--env"]
     )
+    output_lines = result.output.splitlines()
     assert result.exit_code == 0
-    assert result.output == 'export SECRET="super secret"\n'
+    assert 'export SECRET="super secret"' in output_lines
+    assert 'export INIT_VAR_PW="start123"' in output_lines
+    assert 'export DELETED_VAR="does not exists"' not in output_lines
+
+
+def test_cli_env_json():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--keepass-file", TEST_FILE, "--password", TEST_FILE_PWD, "--env", "--json"],
+    )
+    assert result.exit_code == 0
+    output_dict = json.loads(result.output)
+    assert "super secret" == output_dict["SECRET"]
+    assert "start123" == output_dict["INIT_VAR_PW"]
+    assert "DELETED_VAR" not in output_dict
 
 
 def test_cli_export(tmp_path):

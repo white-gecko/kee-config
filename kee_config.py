@@ -5,6 +5,7 @@ from os.path import expanduser, expandvars
 from pathlib import Path
 import os
 import subprocess
+import json
 
 import click
 
@@ -35,6 +36,12 @@ import click
     help="Process entries tagged as init and env and output sourcable variable assignments.",
 )
 @click.option(
+    "json_flag",
+    "--json",
+    is_flag=True,
+    help="Retun the export variables as JSON string, e.g. to read it with fromJSON in a Taskfile.",
+)
+@click.option(
     "export_flag",
     "--export",
     is_flag=True,
@@ -57,6 +64,7 @@ def cli(
     password,
     key_file,
     env_flag,
+    json_flag,
     export_flag,
     connections_flag,
     system_connections,
@@ -70,7 +78,12 @@ def cli(
         keyfile=key_file,
         system_connections=system_connections,
     )
-    kc.load(env_flag, export_flag, connections_flag)
+    kc.load(
+        env_flag=env_flag,
+        json_flag=json_flag,
+        export_flag=export_flag,
+        connections_flag=connections_flag,
+    )
 
 
 class KeeConfig:
@@ -85,39 +98,44 @@ class KeeConfig:
         self.kp = PyKeePass(keepass_file, password=password, keyfile=keyfile)
         self.system_connections = system_connections
 
-    def load(self, env_flag, export_flag, connections_flag):
+    def load(
+        self,
+        env_flag: bool = False,
+        json_flag: bool = False,
+        export_flag: bool = False,
+        connections_flag: bool = False,
+    ):
         # find any entry by its title
         tags = ["init"]
         if env_flag:
             tags += "env"
+            self.json_flag = json_flag
         entries = self.kp.find_entries(tags=tags)
         logger.debug("hi")
+
+        if env_flag:
+            self.kee_env(entries)
+
         for entry in entries:
-            # TODO, make sure it was not deleted or is in the trash
-            logger.info(f"Processing init entry: {entry.title}")
-            init_config_string = entry.get_custom_property("init")
-            init_config = None
-            if init_config_string:
-                init_config = tomllib.loads(init_config_string)
-                logger.debug(f"Init config: {init_config}")
-
-            if env_flag:
-                logger.debug("hi")
-                self.process_section(entry, init_config, "env", self.kee_env)
-
             if export_flag:
-                logger.debug(os.environ["HOME"])
-                self.process_section(
-                    entry, init_config, "files", self.export_attachment
-                )
+                self.process_section(entry, "files", self.export_attachment)
 
             if connections_flag:
-                self.process_section(
-                    entry, init_config, "connections", self.export_connection
-                )
+                self.process_section(entry, "connections", self.export_connection)
 
-    def process_section(self, entry, init_config, section, method):
+    def process_init_config(self, entry):
+        # TODO, make sure it was not deleted or is in the trash
+        logger.info(f"Processing init entry: {entry.title}")
+        init_config_string = entry.get_custom_property("init")
+        if init_config_string:
+            return tomllib.loads(init_config_string)
+
+    def process_section(self, entry, section, method):
         """From an entry process the subsections of a specified toml section with the given method."""
+
+        init_config = self.process_init_config(entry)
+        logger.debug(f"Init config: {init_config}")
+
         if init_config and section in init_config:
             for config_section, config in init_config[section].items():
                 logger.info(f"Processing {section} init block: {config_section}")
@@ -125,13 +143,25 @@ class KeeConfig:
         else:
             method(entry)
 
-    def kee_env(self, entry, **env):
+    def kee_env(self, entries):
         """Get variables from the keepass file and write them to stdout to be evaluated.
-        E.g. with `> eval $(kee-config --env)`"""
-        if not env and "env" in entry.tags:
-            print(f'export {entry.username}="{entry.password}"')
-        for key, value in env.items():
-            print(f'export {key}="{value}"')
+        E.g. with `> eval $(kee-config --env)`
+
+        entry: is the keepass entry
+        env: is a dictionary parsed from the "init" get_custom_property of the entry
+        """
+        env = {}
+        for entry in entries:
+            init_config = self.process_init_config(entry)
+            if (not init_config or not "env" in init_config) and "env" in entry.tags:
+                env[entry.username] = entry.password
+            else:
+                env |= init_config["env"]
+        logger.debug(f"JSON flag is: {self.json_flag}")
+        if self.json_flag:
+            print(json.dumps(env))
+        else:
+            print_export(env)
 
     def export_attachment(
         self, entry, attachment: str = None, target: str = None, mode: str = None
@@ -219,6 +249,11 @@ class KeeConfig:
         # nmcli connection show
         # List system_connections
         logger.info("This method is not yet implemented")
+
+
+def print_export(dictionry):
+    for key, value in dictionry.items():
+        print(f'export {key}="{value}"')
 
 
 def write_file_with_permissions(
