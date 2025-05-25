@@ -111,7 +111,6 @@ class KeeConfig:
             tags += "env"
             self.json_flag = json_flag
         entries = self.kp.find_entries(tags=tags)
-        logger.debug("hi")
 
         if env_flag:
             self.kee_env(entries)
