@@ -1,16 +1,16 @@
-[tool.poetry]
+[project]
 name = "kee-config"
 version = "0.1.0"
 description = "Read configuration and keys from a keepass file"
-authors = ["Natanael Arndt <arndtn@gmail.com>"]
-license = "GPLv3+"
+authors = [
+  { name = "Natanael Arndt", email = "arndtn@gmail.com" },
+]
+license = { text = "GPLv3+" }
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.12"
-pykeepass = "^4.1.0.post1"
-click = "^8.1.8"
-loguru = "^0.7.3"
+dependencies = [
+"pykeepass>=4.1.0.post1,<4.2","click>=8.1.8,<8.2","loguru>=0.7.3,<0.8"
+]
+requires-python = ">=3.12,<4.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -21,3 +21,6 @@ ruff = "^0.11.10"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[project.scripts]
+kee-config = 'kee_config:cli'
