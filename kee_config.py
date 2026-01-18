@@ -189,7 +189,9 @@ class KeeConfig:
                 ["ethernet", "wifi", "vpn", "wireguard"]
             )
             if len(connection_types) != 1:
-                logger.warning(f"Cannot identify connection type from tags: {entry.tags}")
+                logger.warning(
+                    f"Cannot identify connection type from tags: {entry.tags}"
+                )
                 return
             connection_type = next(iter(connection_types))
         connection_type = config.get("type", connection_type)
