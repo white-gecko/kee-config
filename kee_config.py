@@ -152,7 +152,7 @@ class KeeConfig:
         env = {}
         for entry in entries:
             init_config = self.process_init_config(entry)
-            if (not init_config or not "env" in init_config) and "env" in entry.tags:
+            if (not init_config or "env" not in init_config) and "env" in entry.tags:
                 env[entry.username] = entry.password
             else:
                 env |= init_config["env"]
