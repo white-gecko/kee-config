@@ -59,6 +59,18 @@ import click
     default="/etc/NetworkManager/system-connections",
     help="The directory of the network-manager system connections",
 )
+@click.option(
+    "--include",
+    default=None,
+    help="Inclusively define entries to process based on a list of tags",
+    multiple=True,
+)
+@click.option(
+    "--exclude",
+    default=None,
+    help="Exclusively define entries to process based on a list of tags",
+    multiple=True,
+)
 def cli(
     keepass_file,
     password,
@@ -68,10 +80,15 @@ def cli(
     export_flag,
     connections_flag,
     system_connections,
+    include,
+    exclude,
 ):
     """Read config from a keepass file."""
     if system_connections:
         system_connections = Path(system_connections)
+    if include and exclude:
+        logger.error("include and exclude can not be set at the same time.")
+        return
     kc = KeeConfig(
         keepass_file,
         password=password,
@@ -83,6 +100,8 @@ def cli(
         json_flag=json_flag,
         export_flag=export_flag,
         connections_flag=connections_flag,
+        include=include,
+        exclude=exclude,
     )
 
 
@@ -104,13 +123,20 @@ class KeeConfig:
         json_flag: bool = False,
         export_flag: bool = False,
         connections_flag: bool = False,
+        include=None,
+        exclude=None,
     ):
         # find any entry by its title
-        tags = ["init"]
+        tags = ["init", *(include or [])]
         if env_flag:
             tags += "env"
             self.json_flag = json_flag
         entries = self.kp.find_entries(tags=tags)
+
+        if exclude:
+            entries = list(
+                filter(lambda entry: not set(entry.tags) & set(exclude), entries)
+            )
 
         if env_flag:
             self.kee_env(entries)
