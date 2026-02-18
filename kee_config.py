@@ -188,7 +188,9 @@ class KeeConfig:
             connection_types = set(entry.tags).intersection(
                 ["ethernet", "wifi", "vpn", "wireguard"]
             )
-            if len(connection_types) != 1:
+            if len(connection_types) < 1:
+                return
+            elif len(connection_types) > 1:
                 logger.warning(
                     f"Cannot identify connection type from tags: {entry.tags}"
                 )
