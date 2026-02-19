@@ -202,9 +202,15 @@ class KeeConfig:
             logger.error(f"attachment {attachment} could not be found.")
             return
         target_path = Path(expanduser(expandvars(target)))
-        write_file_with_permissions(
-            target_path, kee_attachment.binary, permissions=mode
-        )
+        try:
+            write_file_with_permissions(
+                target_path, kee_attachment.binary, permissions=mode
+            )
+        except Exception:
+            logger.error(
+                f"Could not write attachment file to {target_path}.",
+            )
+
 
     def export_connection(self, entry, **config):
         """Write a network manager connection from the keepass file to the network manager system-connections in filesystem."""
@@ -264,10 +270,15 @@ class KeeConfig:
         ]
         complete = subprocess.run(command, capture_output=True)
         if complete.returncode == 0:
-            write_file_with_permissions(
-                system_connection_file, complete.stdout, permissions="600", chown=(0, 0)
-            )
-            # nmcli connection reload
+            try:
+                write_file_with_permissions(
+                    system_connection_file, complete.stdout, permissions="600", chown=(0, 0)
+                )
+                # nmcli connection reload
+            except Exception:
+                logger.error(
+                    f"Could not adjust file permission for {system_connection_file}.",
+                )
         else:
             logger.error(
                 f"Standard output: {complete.stdout}, Error output: {complete.stderr}",
