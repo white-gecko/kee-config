@@ -1,6 +1,6 @@
 [project]
 name = "kee-config"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read configuration and keys from a keepass file"
 authors = [
   { name = "Natanael Arndt", email = "arndtn@gmail.com" },
